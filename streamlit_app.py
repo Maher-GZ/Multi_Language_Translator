@@ -143,7 +143,7 @@ def main():
     # Add image to the sidebar
     st.sidebar.image("Eng-Man.png", use_column_width=True)
 
-    page = st.sidebar.selectbox("Select a Page", ["Translate", "Multi-Language Translator", "Chatbot"])
+    page = st.sidebar.selectbox("Select a Page", ["Translate", "Multi-Language Translator", "Document Translator", "Chatbot"])
 
     if page == "Translate":
         st.header("Translate Text")
@@ -164,6 +164,34 @@ def main():
         if st.button("Translate"):
             translated_text = translate_text(text, src_lang, tgt_lang, "Multi-Language Translator")
             st.text_area("Translated Text", translated_text, height=200)
+
+    elif page == "Document Translator":
+        st.header("Translate Document")
+        uploaded_file = st.file_uploader("Upload a Document (DOCX or PDF)", type=["docx", "pdf"])
+        src_lang = st.selectbox("Source Language", list(LANGUAGE_CODES.keys()))
+        tgt_lang = st.selectbox("Target Language", list(LANGUAGE_CODES.keys()))
+
+        if uploaded_file and st.button("Translate Document"):
+            if uploaded_file.name.endswith(".docx"):
+                content = read_docx(uploaded_file)
+            elif uploaded_file.name.endswith(".pdf"):
+                content = read_pdf(uploaded_file)
+            else:
+                content = "Unsupported file format."
+
+            translated_content = translate_text(content, src_lang, tgt_lang, "Translate")
+
+            st.text_area("Translated Document Content", translated_content, height=300)
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                docx_file = create_docx(translated_content)
+                st.download_button("Download as DOCX", data=docx_file, file_name="translated_document.docx")
+
+            with col2:
+                pdf_file = create_pdf(translated_content)
+                st.download_button("Download as PDF", data=pdf_file, file_name="translated_document.pdf")
 
     elif page == "Chatbot":
         st.header("Chatbot Translator")
