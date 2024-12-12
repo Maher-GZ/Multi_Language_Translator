@@ -1,32 +1,33 @@
-from flask import Flask, render_template, request, jsonify
-from langchain_core.prompts import ChatPromptTemplate
+import streamlit as st
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_community.chat_models import ChatOllama
 import docx
 import fitz  # PyMuPDF
 from typing import List
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
 from io import BytesIO
 from docx import Document as DocxDocument
-import time
 import textwrap
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 
 # Language codes for translation
 LANGUAGE_CODES = {
     "English": "en",
     "German": "de",
     "French": "fr",
-    "Hindi": "hi"
+    "Hindi": "hi",
+    "Arabic": "ar"
 }
 
 # System messages for different translation scenarios
-SYSTEM_MESSAGE_TRANSLATE = """You are an expert assistant specializing in translation between German and English. Your tasks are as follows:
+SYSTEM_MESSAGE_TRANSLATE = """You are an expert assistant specializing in translation between German, English, and Arabic. Your tasks are as follows:
 Language Detection:
 Identify the language of the input text. Do not answer the questions if asked in text. Just translate the question text as question itself.
 Translation:
 If the text is in German, translate it to English.
 If the text is in English, translate it to German.
+If the text is in Arabic, translate it to English.
+If the text is in English, translate it to Arabic.
 Provide accurate and contextually appropriate translations. Ensure that the translated text maintains the original meaning, type, and tone.
 IMPORTANT: Provide only the translated text as output.
 """
@@ -39,10 +40,11 @@ If the text is in French, translate it to English.
 If the text is in English, translate it to French.
 If the text is in Hindi, translate it to English.
 If the text is in English, translate it to Hindi.
+If the text is in Arabic, translate it to English.
+If the text is in English, translate it to Arabic.
 Provide accurate and contextually appropriate translations. Ensure that the translated text maintains the original meaning, type, and tone.
 IMPORTANT: Provide only the translated text as output. Do not include any additional comments or answers.
 """
-
 
 # Function for translating text
 def translate_text(text: str, src_lang: str, tgt_lang: str, page_type: str) -> str:
@@ -54,7 +56,7 @@ def translate_text(text: str, src_lang: str, tgt_lang: str, page_type: str) -> s
     else:  # Multi-Language Translator
         system_message = SYSTEM_MESSAGE_MULTI_LANG
 
-    system_message = system_message.replace("German", src_lang).replace("English", tgt_lang)
+    system_message = system_message.replace("German", src_lang).replace("English", tgt_lang).replace("Arabic", tgt_lang if tgt_lang == "Arabic" else src_lang)
 
     llm = ChatOllama(model="llama3")
     messages = [
@@ -64,7 +66,6 @@ def translate_text(text: str, src_lang: str, tgt_lang: str, page_type: str) -> s
 
     translated_text = llm.invoke(messages)
     return translated_text.content.strip()
-
 
 # Function for detecting the language of the text
 def detect_language(text: str) -> str:
@@ -82,7 +83,6 @@ def detect_language(text: str) -> str:
     detected_language = llm.invoke(messages)
     return detected_language.content.strip()
 
-
 # Functions for handling docx and pdf files
 def read_docx(file) -> str:
     try:
@@ -92,7 +92,6 @@ def read_docx(file) -> str:
     except Exception as e:
         return f"Error reading DOCX: {e}"
 
-
 def read_pdf(file) -> str:
     try:
         doc = fitz.open(stream=file.read(), filetype="pdf")
@@ -100,7 +99,6 @@ def read_pdf(file) -> str:
         return '\n'.join(full_text).strip()
     except Exception as e:
         return f"Error reading PDF: {e}"
-
 
 # Functions to create downloadable files
 def create_pdf(content: str) -> BytesIO:
@@ -130,7 +128,6 @@ def create_pdf(content: str) -> BytesIO:
     buffer.seek(0)
     return buffer
 
-
 def create_docx(content: str) -> BytesIO:
     doc = DocxDocument()
     doc.add_paragraph(content)
@@ -139,46 +136,51 @@ def create_docx(content: str) -> BytesIO:
     buffer.seek(0)
     return buffer
 
+# Streamlit App
+def main():
+    st.title("Multilanguage Translator")
 
-app = Flask(__name__)
+    # Add image to the sidebar
+    st.sidebar.image("Eng-Man.png", use_column_width=True)
 
-@app.route('/')
-def home():
-    return render_template('home.html')
+    page = st.sidebar.selectbox("Select a Page", ["Translate", "Multi-Language Translator", "Chatbot"])
 
-@app.route('/translate', methods=['GET', 'POST'])
-def translate():
-    if request.method == 'POST':
-        text = request.form['text']
-        src_lang = request.form['src_lang']
-        tgt_lang = request.form['tgt_lang']
-        translated_text = translate_text(text, src_lang, tgt_lang, 'Translate')
-        return jsonify({'translated_text': translated_text})
-    return render_template('translate.html')
+    if page == "Translate":
+        st.header("Translate Text")
+        text = st.text_area("Enter Text")
+        src_lang = st.selectbox("Source Language", list(LANGUAGE_CODES.keys()))
+        tgt_lang = st.selectbox("Target Language", list(LANGUAGE_CODES.keys()))
 
-@app.route('/multi_language_translator', methods=['GET', 'POST'])
-def multi_language_translator():
-    if request.method == 'POST':
-        text = request.form['text']
-        src_lang = request.form['src_lang']
-        tgt_lang = request.form['tgt_lang']
-        translated_text = translate_text(text, src_lang, tgt_lang, 'Multi-Language Translator')
-        return jsonify({'translated_text': translated_text})
-    return render_template('multi_language_translator.html')
+        if st.button("Translate"):
+            translated_text = translate_text(text, src_lang, tgt_lang, "Translate")
+            st.text_area("Translated Text", translated_text, height=200)
 
-@app.route('/chatbot', methods=['GET', 'POST'])
-def chatbot():
-    if request.method == 'POST':
-        text = request.form['text']
-        detected_language = detect_language(text)
-        if detected_language == "German":
-            translated_text = translate_text(text, "German", "English", "Translate")
-        elif detected_language == "English":
-            translated_text = translate_text(text, "English", "German", "Translate")
-        else:
-            translated_text = f"Detected language: {detected_language} - Translation not supported."
-        return jsonify({'translated_text': translated_text})
-    return render_template('chatbot.html')
+    elif page == "Multi-Language Translator":
+        st.header("Multi-Language Translator")
+        text = st.text_area("Enter Text")
+        src_lang = st.selectbox("Source Language", list(LANGUAGE_CODES.keys()))
+        tgt_lang = st.selectbox("Target Language", list(LANGUAGE_CODES.keys()))
 
-if __name__ == '__main__':
-    app.run(debug=True)
+        if st.button("Translate"):
+            translated_text = translate_text(text, src_lang, tgt_lang, "Multi-Language Translator")
+            st.text_area("Translated Text", translated_text, height=200)
+
+    elif page == "Chatbot":
+        st.header("Chatbot Translator")
+        text = st.text_area("Enter Text")
+
+        if st.button("Detect and Translate"):
+            detected_language = detect_language(text)
+            if detected_language in ["German", "English", "Arabic"]:
+                translated_text = translate_text(
+                    text,
+                    detected_language,
+                    "English" if detected_language != "English" else "German",
+                    "Translate"
+                )
+                st.text_area("Translated Text", translated_text, height=200)
+            else:
+                st.write(f"Detected language: {detected_language} - Translation not supported.")
+
+if __name__ == "__main__":
+    main()
